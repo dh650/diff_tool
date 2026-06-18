@@ -15,7 +15,7 @@ def safe_print(*args, **kwargs):
         kwargs['flush'] = True
         print(*args, **kwargs)
 
-def signal_handler(sig, frame):
+def signal_handler(sig, frame, output_file=None):
     safe_print("\n\n[Прерывание по Ctrl+C]")
     safe_print(f"Сравнено пар: {total_comparisons}")
     safe_print(f"Найдено похожих пар (≥50%): {len(similar_pairs)}")
@@ -30,10 +30,58 @@ def signal_handler(sig, frame):
             safe_print(f"  {file1}")
             safe_print(f"  {file2}")
             safe_print("-" * 120)
+
+        if output_file:
+            print_results_to_file(similar_pairs, total_comparisons, output_file)
     else:
         safe_print("\nПохожих пар не найдено")
 
     sys.exit(0)
+
+def print_results(similar_pairs, total_comparisons, output_file=None):
+    if output_file:
+        print_results_to_file(similar_pairs, total_comparisons, output_file)
+    else:
+        print(f"\nСравнено пар: {total_comparisons}")
+        print(f"Найдено похожих пар (≥50%): {len(similar_pairs)}")
+
+        if similar_pairs:
+            print("\nПохожие файлы:")
+            print("-" * 120)
+            print(f"{'Файл 1':<40} | {'Файл 2':<40} | {'Сходство':<10}")
+            print("-" * 120)
+
+            for (file1, file2), similarity in similar_pairs:
+                print(f"{os.path.basename(file1):<40} | {os.path.basename(file2):<40} | {similarity:7.1f}%")
+                print(f"  {file1}")
+                print(f"  {file2}")
+                print("-" * 120)
+        else:
+            print("\nПохожих пар не найдено")
+
+def print_results_to_file(similar_pairs, total_comparisons, output_file):
+    try:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(f"Сравнено пар: {total_comparisons}\n")
+            f.write(f"Найдено похожих пар (≥50%): {len(similar_pairs)}\n\n")
+
+            if similar_pairs:
+                f.write("Похожие файлы:\n")
+                f.write("-" * 120 + "\n")
+                f.write(f"{'Файл 1':<40} | {'Файл 2':<40} | {'Сходство':<10}\n")
+                f.write("-" * 120 + "\n")
+
+                for (file1, file2), similarity in similar_pairs:
+                    f.write(f"{os.path.basename(file1):<40} | {os.path.basename(file2):<40} | {similarity:7.1f}%\n")
+                    f.write(f"  {file1}\n")
+                    f.write(f"  {file2}\n")
+                    f.write("-" * 120 + "\n")
+            else:
+                f.write("Похожих пар не найдено\n")
+
+        safe_print(f"\nРезультаты сохранены в файл: {output_file}")
+    except Exception as e:
+        safe_print(f"Ошибка записи в файл {output_file}: {e}")
 
 def find_files(folder_path, extension, exclude_extensions=None, all_files=False):
     if exclude_extensions is None:
@@ -85,24 +133,6 @@ def similarity_ratio(content1, content2):
     matcher = difflib.SequenceMatcher(None, ''.join(content1), ''.join(content2))
     return matcher.ratio() * 100
 
-def print_results(similar_pairs, total_comparisons):
-    print(f"\nСравнено пар: {total_comparisons}")
-    print(f"Найдено похожих пар (≥50%): {len(similar_pairs)}")
-
-    if similar_pairs:
-        print("\nПохожие файлы:")
-        print("-" * 120)
-        print(f"{'Файл 1':<40} | {'Файл 2':<40} | {'Сходство':<10}")
-        print("-" * 120)
-
-        for (file1, file2), similarity in similar_pairs:
-            print(f"{os.path.basename(file1):<40} | {os.path.basename(file2):<40} | {similarity:7.1f}%")
-            print(f"  {file1}")
-            print(f"  {file2}")
-            print("-" * 120)
-    else:
-        print("\nПохожих пар не найдено")
-
 def main():
     global similar_pairs, total_comparisons
 
@@ -118,9 +148,11 @@ def main():
                        help='Подробный вывод процесса сравнения')
     parser.add_argument('-l', action='store_true',
                        help='Сравнивать ВСЕ файлы только с файлами из папок содержащих "LOC"')
+    parser.add_argument('-o', '--output',
+                       help='Вывод результатов в файл (по умолчанию: вывод в консоль)')
     args = parser.parse_args()
 
-    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGINT, lambda sig, frame: signal_handler(sig, frame, args.output))
 
     if not os.path.exists(args.folder_path):
         print(f"Папка '{args.folder_path}' не существует")
@@ -233,7 +265,7 @@ def main():
     except KeyboardInterrupt:
         pass
 
-    print_results(similar_pairs, total_comparisons)
+    print_results(similar_pairs, total_comparisons, args.output)
 
 if __name__ == "__main__":
     main()
